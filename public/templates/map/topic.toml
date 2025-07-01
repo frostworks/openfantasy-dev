@@ -1,0 +1,7 @@
+# public/templates/map/topic.toml
+template = "/templates/topic.tpl"
+data_url = "/api/topic/1"
+
+[bind]
+"topic_title" = "title"
+"posts" = "posts"
