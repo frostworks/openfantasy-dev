@@ -1,42 +1,38 @@
-// main.js
-import Toml from 'toml';
-
 window.app = function () {
   return {
     ajaxify: {
-      data: {}, // Our main data store
+      data: {},
     },
     template: '<div>Loading...</div>',
 
-    async init(templateName) {
-      // 1. Fetch the TOML map file
-      const mapResponse = await fetch(`/templates/map/${templateName}.toml`);
-      const mapToml = await mapResponse.text();
-      const mapConfig = Toml.parse(mapToml);
+    async init(templateName) { // templateName is still 'topic'
+      // --- THIS IS NOW MUCH SIMPLER ---
+      try {
+        // 1. Fetch the configuration from our new server endpoint
+        const configResponse = await fetch('/api/topic-data');
+        const mapConfig = await configResponse.json();
 
-      // 2. Fetch the API data and the TPL template concurrently
-      const [dataResponse, templateResponse] = await Promise.all([
-        fetch(`${mapConfig.data_url}.json`), // append .json for our mock file
-        fetch(mapConfig.template)
-      ]);
+        // 2. Fetch the actual topic data (the mock JSON file) and template
+        const [dataResponse, templateResponse] = await Promise.all([
+          fetch(`${mapConfig.data_url}.json`),
+          fetch(mapConfig.template)
+        ]);
 
-      const data = await dataResponse.json();
-      const tpl = await templateResponse.text();
+        const data = await dataResponse.json();
+        const tpl = await templateResponse.text();
 
-      // 3. Bind data to our ajaxify store based on TOML 'bind' rules
-      // For this PoC, we'll just map the whole object
-      this.ajaxify.data = {
-          [mapConfig.bind.topic_title]: data.title,
-          [mapConfig.bind.posts]: data.posts
-      };
+        this.ajaxify.data = {
+            [mapConfig.bind.topic_title]: data.title,
+            [mapConfig.bind.posts]: data.posts
+        };
 
-      // 4. Set the template
-      this.template = tpl;
-
-      console.log('Data loaded into ajaxify.data:', this.ajaxify.data);
+        this.template = tpl;
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        this.template = '<div>Error loading content.</div>';
+      }
     },
 
-    // main.js -> inside the return object of app()
     replyContent: '',
 
     submitReply() {

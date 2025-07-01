@@ -12,6 +12,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
+    "express": "^5.1.0",
     "toml": "^3.0.0"
   }
 }
