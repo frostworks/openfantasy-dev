@@ -59,35 +59,46 @@ window.llmChat = function () {
   return {
     userInput: '',
     chatHistory: [
-      { id: 1, role: 'llm', text: 'You are in the town square. What would you like to do?' }
+      // You can keep an initial message or start with an empty array
+      { id: 1, role: 'llm', text: 'Welcome! The Game Master is ready.' }
     ],
-
-    // This is where you'll integrate the real LLM
-    async getLlmResponse(prompt) {
-      // For Phase 0, we just mock the response
-      console.log("Creating mock response for prompt:", prompt);
-      await new Promise(res => setTimeout(res, 500)); // Simulate network delay
-      return `You said "${prompt}". For now, I'm just a simple echo bot.`;
-    },
+    isWaitingForResponse: false,
 
     async sendMessage() {
-      if (!this.userInput.trim()) return;
+      if (!this.userInput.trim() || this.isWaitingForResponse) return;
 
-      // 1. Add user message to history
+      // 1. Add user message to the history
       const userMessage = this.userInput;
       this.chatHistory.push({ id: Date.now(), role: 'user', text: userMessage });
-      this.userInput = ''; // Clear input
+      this.userInput = '';
+      this.isWaitingForResponse = true;
 
-      // 2. TODO: Retrieve context from TOML files based on userMessage
-      // For example, if user says "look at the sword", fetch `items/short_sword.toml`
-      const context = "This is where TOML data would go.";
+      try {
+        // 2. Call the server's API endpoint
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          // Send the whole history, not just the single message
+          body: JSON.stringify({ history: this.chatHistory }), 
+        });
 
-      // 3. Build the prompt and get a response
-      const prompt = `Context: ${context}\n\nUser Action: ${userMessage}\n\nResponse:`;
-      const llmResponseText = await this.getLlmResponse(userMessage);
+        if (!response.ok) {
+          throw new Error('Server responded with an error.');
+        }
 
-      // 4. Add LLM response to history
-      this.chatHistory.push({ id: Date.now() + 1, role: 'llm', text: llmResponseText });
-    }
+        const data = await response.json();
+        
+        // 3. Add the server's reply to the history
+        this.chatHistory.push({ id: Date.now() + 1, role: 'llm', text: data.reply });
+
+      } catch (error) {
+        console.error('Error contacting server:', error);
+        this.chatHistory.push({ id: Date.now() + 1, role: 'llm', text: 'Sorry, there was an error connecting to the Game Master.' });
+      } finally {
+        this.isWaitingForResponse = false;
+      }
+    },
   };
 };
