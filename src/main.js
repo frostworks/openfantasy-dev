@@ -58,3 +58,40 @@ window.app = function () {
     }
   };
 };
+
+window.llmChat = function () {
+  return {
+    userInput: '',
+    chatHistory: [
+      { id: 1, role: 'llm', text: 'You are in the town square. What would you like to do?' }
+    ],
+
+    // This is where you'll integrate the real LLM
+    async getLlmResponse(prompt) {
+      // For Phase 0, we just mock the response
+      console.log("Creating mock response for prompt:", prompt);
+      await new Promise(res => setTimeout(res, 500)); // Simulate network delay
+      return `You said "${prompt}". For now, I'm just a simple echo bot.`;
+    },
+
+    async sendMessage() {
+      if (!this.userInput.trim()) return;
+
+      // 1. Add user message to history
+      const userMessage = this.userInput;
+      this.chatHistory.push({ id: Date.now(), role: 'user', text: userMessage });
+      this.userInput = ''; // Clear input
+
+      // 2. TODO: Retrieve context from TOML files based on userMessage
+      // For example, if user says "look at the sword", fetch `items/short_sword.toml`
+      const context = "This is where TOML data would go.";
+
+      // 3. Build the prompt and get a response
+      const prompt = `Context: ${context}\n\nUser Action: ${userMessage}\n\nResponse:`;
+      const llmResponseText = await this.getLlmResponse(userMessage);
+
+      // 4. Add LLM response to history
+      this.chatHistory.push({ id: Date.now() + 1, role: 'llm', text: llmResponseText });
+    }
+  };
+};

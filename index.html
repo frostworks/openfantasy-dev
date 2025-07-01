@@ -4,12 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TOML-based NodeBB Frontend</title>
+    <style>
+      body { display: flex; font-family: sans-serif; }
+      #app { flex-grow: 1; padding: 1rem; }
+      #sidebar { width: 300px; border-left: 1px solid #ccc; padding: 1rem; display: flex; flex-direction: column; height: 100vh; }
+      .chat-window { flex-grow: 1; overflow-y: auto; margin-bottom: 1rem; }
+      .chat-message { margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 5px; }
+      .chat-message.user { background-color: #e1f5fe; text-align: right; }
+      .chat-message.llm { background-color: #f1f1f1; }
+    </style>
     <script type="module" src="/src/main.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   </head>
   <body>
     <div id="app" x-data="app()" x-init="init('topic')">
       <div x-html="template"></div>
+    </div>
+
+    <div id="sidebar" x-data="llmChat()">
+      <h3>Game Master</h3>
+      <div class="chat-window">
+        <template x-for="message in chatHistory" :key="message.id">
+          <div class="chat-message" :class="message.role">
+            <p x-text="message.text"></p>
+          </div>
+        </template>
+      </div>
+      <form @submit.prevent="sendMessage()">
+        <input type="text" x-model="userInput" placeholder="What do you do?" />
+        <button type="submit">Send</button>
+      </form>
     </div>
   </body>
 </html>
