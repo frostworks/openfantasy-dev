@@ -98,6 +98,90 @@ app.post('/api/chat', async (req, res) => {
 });
 
 
+// --- NEW: Endpoint to publish chat history to NodeBB ---
+app.post('/api/publish-topic', async (req, res) => {
+    const { history } = req.body;
+    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
+    const NODEBB_URL = 'http://localhost:4567'; // Your NodeBB instance URL
+
+    if (!NODEBB_API_KEY || !NODEBB_UID) {
+        return res.status(500).json({ error: 'NodeBB API Key or UID not configured on the server.' });
+    }
+
+    if (!history || history.length < 2) {
+        return res.status(400).json({ error: 'Chat history is too short to publish.' });
+    }
+
+    try {
+        // --- Step 1: Create the initial topic ---
+        const firstPost = history[1]; // Use the first user message as the topic content
+        const topicTitle = `Game Session: ${new Date().toLocaleString()}`;
+
+        const topicData = {
+            _uid: NODEBB_UID,
+            title: topicTitle,
+            content: firstPost.text,
+            // You might want to add a category ID here, e.g., cid: 5
+        };
+
+        const topicResponse = await fetch(`${NODEBB_URL}/api/v3/topics`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${NODEBB_API_KEY}`,
+            },
+            body: JSON.stringify(topicData),
+        });
+
+        const topicResult = await topicResponse.json();
+        if (!topicResponse.ok) {
+            throw new Error(`NodeBB Error: ${topicResult.message || 'Failed to create topic'}`);
+        }
+
+        const { tid, pid } = topicResult.payload.topicData;
+        const pids = [pid]; // Start our list of post IDs
+
+        // --- Step 2: Post the rest of the chat as replies ---
+        const replies = history.slice(2); // All messages after the first user post
+
+        for (const post of replies) {
+            const replyData = {
+                _uid: NODEBB_UID,
+                content: `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`,
+            };
+
+            const replyResponse = await fetch(`${NODEBB_URL}/api/v3/topics/${tid}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${NODEBB_API_KEY}`,
+                },
+                body: JSON.stringify(replyData),
+            });
+            
+            const replyResult = await replyResponse.json();
+            if (!replyResponse.ok) {
+                // If one reply fails, we still return what we have so far
+                console.error('Failed to post a reply:', replyResult.message);
+                continue; // Continue to the next post
+            }
+            pids.push(replyResult.payload.pid);
+        }
+
+        // --- Step 3: Send the result back to the client ---
+        res.json({
+            message: 'Successfully published topic!',
+            tid: tid,
+            pids: pids,
+            url: `${NODEBB_URL}/topic/${tid}`,
+        });
+
+    } catch (error) {
+        console.error('Error publishing to NodeBB:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Start the Server ---
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);

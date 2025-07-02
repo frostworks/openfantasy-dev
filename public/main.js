@@ -100,5 +100,35 @@ window.llmChat = function () {
         this.isWaitingForResponse = false;
       }
     },
+    // NEW: Function to publish the chat
+    async publishChat() {
+      this.isWaitingForResponse = true;
+      this.publishStatus = 'Publishing to forum...';
+
+      try {
+          const response = await fetch('/api/publish-topic', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ history: this.chatHistory }),
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+              throw new Error(result.error || 'Failed to publish.');
+          }
+          
+          // Create a clickable link in the status message
+          this.publishStatus = `Successfully published! <a href="${result.url}" target="_blank">View Topic</a>`;
+
+      } catch (error) {
+          console.error('Error publishing chat:', error);
+          this.publishStatus = `Error: ${error.message}`;
+      } finally {
+          this.isWaitingForResponse = false;
+      }
+    }
   };
 };
