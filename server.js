@@ -106,6 +106,10 @@ app.post('/api/publish-topic', async (req, res) => {
         topicData.append('title', topicTitle);
         topicData.append('content', firstPost.text);
         topicData.append('cid', '1');
+        // NEW: Add the system tag(s) to the topic
+        topicData.append('tags[]', 'Civ VI');
+        topicData.append('tags[]', 'GameMasterSession');
+
 
         const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
         
@@ -120,7 +124,6 @@ app.post('/api/publish-topic', async (req, res) => {
             
             const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
             
-            // CORRECTED: Destructure from the correct 'response' object for replies
             pids.push(replyResponse.data.response.pid);
         }
 
