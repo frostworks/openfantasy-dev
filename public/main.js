@@ -63,6 +63,7 @@ window.llmChat = function () {
       { id: 1, role: 'llm', text: 'Welcome! The Game Master is ready.' }
     ],
     isWaitingForResponse: false,
+    publishStatus: '',
 
     async sendMessage() {
       if (!this.userInput.trim() || this.isWaitingForResponse) return;

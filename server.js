@@ -4,25 +4,22 @@ import toml from 'toml';
 import fs from 'fs';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
-import path from 'path'; // Import the path module
-import { fileURLToPath } from 'url'; // Import for ES module __dirname equivalent
-
-// Import livereload and connect-livereload
+import path from 'path';
+import { fileURLToPath } from 'url';
 import livereload from 'livereload';
 import connectLiveReload from 'connect-livereload';
 
+// Import axios
+import axios from 'axios';
+
 dotenv.config();
 
-// --- ES Module equivalent for __dirname ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- Live Reload Setup ---
-// Create a livereload server and watch the public folder for changes
 const liveReloadServer = livereload.createServer();
 liveReloadServer.watch(path.join(__dirname, 'public'));
 
-// Ping the browser on Express boot, once browser has reconnected and handshaken
 liveReloadServer.server.once("connection", () => {
   setTimeout(() => {
     liveReloadServer.refresh("/");
@@ -32,25 +29,14 @@ liveReloadServer.server.once("connection", () => {
 const app = express();
 const PORT = 3000;
 
-// --- Middleware ---
-// Use the connect-livereload middleware to inject the script into the page
 app.use(connectLiveReload());
-
-// Serve static files from the 'public' directory
 app.use(express.static('public'));
-
-// Allow the server to parse JSON request bodies
 app.use(express.json());
 
-
-// --- Gemini Initialization ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
 const SYSTEM_PROMPT = `You are a fantasy RPG Game Master. Your tone is slightly archaic and descriptive. You are running a game for the user. Do not break character.`;
 
-
-// --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {
     try {
         const fileContent = fs.readFileSync(path.join(__dirname, 'public', 'templates', 'map', 'topic.toml'), 'utf8');
@@ -64,7 +50,6 @@ app.get('/api/topic-data', (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
     const { history } = req.body;
-
     const latestUserMessage = history[history.length - 1].text;
     console.log('Received history. Latest message:', latestUserMessage);
 
@@ -88,87 +73,59 @@ app.post('/api/chat', async (req, res) => {
         const result = await chat.sendMessage(latestUserMessage);
         const response = result.response;
         const text = response.text();
-
         res.json({ reply: text });
-
     } catch (error) {
         console.error('Error during Gemini API call:', error);
         res.status(500).json({ error: 'Failed to get a response from Gemini.' });
     }
 });
 
-
-// --- NEW: Endpoint to publish chat history to NodeBB ---
+// UPDATED: This endpoint now uses axios with URLSearchParams
 app.post('/api/publish-topic', async (req, res) => {
     const { history } = req.body;
     const { NODEBB_API_KEY, NODEBB_UID } = process.env;
-    const NODEBB_URL = 'http://localhost:4567'; // Your NodeBB instance URL
+    const NODEBB_URL = 'http://localhost:4567';
 
     if (!NODEBB_API_KEY || !NODEBB_UID) {
         return res.status(500).json({ error: 'NodeBB API Key or UID not configured on the server.' });
     }
-
     if (!history || history.length < 2) {
         return res.status(400).json({ error: 'Chat history is too short to publish.' });
     }
 
+    const headers = {
+        'Authorization': `Bearer ${NODEBB_API_KEY}`,
+        // Set the correct Content-Type for URL-encoded data
+        'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
     try {
-        // --- Step 1: Create the initial topic ---
-        const firstPost = history[1]; // Use the first user message as the topic content
+        const firstPost = history[1];
         const topicTitle = `Game Session: ${new Date().toLocaleString()}`;
+        
+        // Format data using URLSearchParams
+        const topicData = new URLSearchParams();
+        topicData.append('_uid', NODEBB_UID);
+        topicData.append('title', topicTitle);
+        topicData.append('content', firstPost.text);
+        // If you need to specify a category, you would add it here:
+        // topicData.append('cid', 5);
 
-        const topicData = {
-            _uid: NODEBB_UID,
-            title: topicTitle,
-            content: firstPost.text,
-            // You might want to add a category ID here, e.g., cid: 5
-        };
+        const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData, { headers });
+        const { tid, pid } = topicResponse.data.payload.topicData;
+        const pids = [pid];
 
-        const topicResponse = await fetch(`${NODEBB_URL}/api/v3/topics`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${NODEBB_API_KEY}`,
-            },
-            body: JSON.stringify(topicData),
-        });
-
-        const topicResult = await topicResponse.json();
-        if (!topicResponse.ok) {
-            throw new Error(`NodeBB Error: ${topicResult.message || 'Failed to create topic'}`);
-        }
-
-        const { tid, pid } = topicResult.payload.topicData;
-        const pids = [pid]; // Start our list of post IDs
-
-        // --- Step 2: Post the rest of the chat as replies ---
-        const replies = history.slice(2); // All messages after the first user post
-
+        const replies = history.slice(2);
         for (const post of replies) {
-            const replyData = {
-                _uid: NODEBB_UID,
-                content: `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`,
-            };
-
-            const replyResponse = await fetch(`${NODEBB_URL}/api/v3/topics/${tid}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${NODEBB_API_KEY}`,
-                },
-                body: JSON.stringify(replyData),
-            });
+            // Format reply data using URLSearchParams
+            const replyData = new URLSearchParams();
+            replyData.append('_uid', NODEBB_UID);
+            replyData.append('content', `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`);
             
-            const replyResult = await replyResponse.json();
-            if (!replyResponse.ok) {
-                // If one reply fails, we still return what we have so far
-                console.error('Failed to post a reply:', replyResult.message);
-                continue; // Continue to the next post
-            }
-            pids.push(replyResult.payload.pid);
+            const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData, { headers });
+            pids.push(replyResponse.data.payload.pid);
         }
 
-        // --- Step 3: Send the result back to the client ---
         res.json({
             message: 'Successfully published topic!',
             tid: tid,
@@ -177,12 +134,11 @@ app.post('/api/publish-topic', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error publishing to NodeBB:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Error publishing to NodeBB:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: error.response ? error.response.data.description : 'Failed to publish to NodeBB.' });
     }
 });
 
-// --- Start the Server ---
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
     console.log('Gemini API client initialized. Ready to chat!');
