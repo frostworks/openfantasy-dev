@@ -148,6 +148,7 @@ window.llmChat = function () {
         try {
             const response = await fetch(`/api/load-session?url=${encodeURIComponent(rssUrl)}`);
             const result = await response.json();
+            console.log(rssUrl,'result:',result);
 
             if (!response.ok) { throw new Error(result.error || 'Failed to load session.'); }
 

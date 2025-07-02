@@ -10,7 +10,7 @@ import livereload from 'livereload';
 import connectLiveReload from 'connect-livereload';
 import axios from 'axios';
 
-// NEW: Import the XML parser
+// Import the XML parser
 import { XMLParser } from 'fast-xml-parser';
 
 dotenv.config();
@@ -40,7 +40,7 @@ const SYSTEM_PROMPT = `You are a fantasy RPG Game Master. Your tone is slightly 
 
 const NODEBB_URL = 'http://localhost:4567';
 
-
+// --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {
     try {
         const fileContent = fs.readFileSync(path.join(__dirname, 'public', 'templates', 'map', 'topic.toml'), 'utf8');
@@ -87,7 +87,6 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/publish-topic', async (req, res) => {
     const { history } = req.body;
     const { NODEBB_API_KEY, NODEBB_UID } = process.env;
-    const NODEBB_URL = 'http://localhost:4567';
 
     if (!NODEBB_API_KEY || !NODEBB_UID) {
         return res.status(500).json({ error: 'NodeBB API Key or UID not configured on the server.' });
@@ -110,10 +109,8 @@ app.post('/api/publish-topic', async (req, res) => {
         topicData.append('title', topicTitle);
         topicData.append('content', firstPost.text);
         topicData.append('cid', '1');
-        // NEW: Add the system tag(s) to the topic
         topicData.append('tags[]', 'Civ VI');
         topicData.append('tags[]', 'GameMasterSession');
-
 
         const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
         
@@ -127,15 +124,20 @@ app.post('/api/publish-topic', async (req, res) => {
             replyData.append('content', `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`);
             
             const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
-            
             pids.push(replyResponse.data.response.pid);
         }
+
+        // NEW: Fetch the full topic data to get the rssFeedUrl
+        const fullTopicDataResponse = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+        const { rssFeedUrl } = fullTopicDataResponse.data;
 
         res.json({
             message: 'Successfully published topic!',
             tid: tid,
             pids: pids,
             url: `${NODEBB_URL}/topic/${tid}`,
+            rssUrl: rssFeedUrl, // Send the correct RSS URL back
+            title: topicTitle,
         });
 
     } catch (error) {
@@ -143,6 +145,7 @@ app.post('/api/publish-topic', async (req, res) => {
         res.status(500).json({ error: error.response ? error.response.data.description : 'Failed to publish to NodeBB.' });
     }
 });
+
 
 app.get('/api/load-session', async (req, res) => {
     const { url } = req.query;
@@ -167,15 +170,13 @@ app.get('/api/load-session', async (req, res) => {
 
         const chatHistory = [];
 
-        // 1. Handle the first post (from the channel description)
         const firstPostContent = parsedXml.rss.channel.description.__cdata.replace(/<p dir="auto">|<\/p>/g, '').trim();
         chatHistory.push({
             id: Date.parse(parsedXml.rss.channel.pubDate),
-            role: 'user', // The first post is always the user
+            role: 'user',
             text: firstPostContent,
         });
 
-        // 2. Handle the replies (from the items)
         const reversedItems = items.reverse();
         for (const item of reversedItems) {
             const description = item.description.__cdata;
@@ -190,7 +191,6 @@ app.get('/api/load-session', async (req, res) => {
                 text = text.replace(/<strong>Player:<\/strong>/, '');
             }
             
-            // Clean up remaining HTML tags
             text = text.replace(/<p dir="auto">|<\/p>/g, '').trim();
 
             chatHistory.push({
@@ -210,6 +210,6 @@ app.get('/api/load-session', async (req, res) => {
 
 
 app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+    console.log(`Server is running at localhost:${PORT}`);
     console.log('Gemini API client initialized. Ready to chat!');
 });
