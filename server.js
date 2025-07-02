@@ -127,7 +127,6 @@ app.post('/api/publish-topic', async (req, res) => {
             pids.push(replyResponse.data.response.pid);
         }
 
-        // NEW: Fetch the full topic data to get the rssFeedUrl
         const fullTopicDataResponse = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
         const { rssFeedUrl } = fullTopicDataResponse.data;
 
@@ -136,7 +135,7 @@ app.post('/api/publish-topic', async (req, res) => {
             tid: tid,
             pids: pids,
             url: `${NODEBB_URL}/topic/${tid}`,
-            rssUrl: rssFeedUrl, // Send the correct RSS URL back
+            rssUrl: rssFeedUrl,
             title: topicTitle,
         });
 
@@ -149,13 +148,24 @@ app.post('/api/publish-topic', async (req, res) => {
 
 app.get('/api/load-session', async (req, res) => {
     const { url } = req.query;
+    const { NODEBB_API_KEY } = process.env;
+
     if (!url) {
         return res.status(400).json({ error: 'RSS feed URL is required.' });
     }
+    if (!NODEBB_API_KEY) {
+        return res.status(500).json({ error: 'NodeBB API Key not configured on the server.' });
+    }
+
+    // Add authentication headers to the request
+    const headers = {
+        'Authorization': `Bearer ${NODEBB_API_KEY}`,
+    };
 
     try {
         const fullUrl = `${NODEBB_URL}${url}`;
-        const response = await axios.get(fullUrl);
+        // Pass the headers with the axios GET request
+        const response = await axios.get(fullUrl, { headers });
         const xmlData = response.data;
 
         const parser = new XMLParser({
