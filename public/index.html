@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TOML-based NodeBB Frontend</title>
     <style>
-      body { display: flex; font-family: sans-serif; }
+      body { display: flex; font-family: sans-serif; gap: 1rem; }
       #app { flex-grow: 1; padding: 1rem; }
       #sidebar { width: 350px; border-left: 1px solid #ccc; padding: 1rem; display: flex; flex-direction: column; height: 100vh; }
       .chat-window { flex-grow: 1; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #eee; padding: 0.5rem; border-radius: 5px;}
@@ -16,6 +16,11 @@
       .chat-actions { display: flex; gap: 0.5rem; }
       .chat-actions button { flex-grow: 1; }
       .publish-status { margin-top: 1rem; padding: 0.5rem; background-color: #e8f5e9; border-radius: 5px; text-align: center; }
+      .saved-sessions { margin-top: 1rem; }
+      .saved-sessions h4 { margin-bottom: 0.5rem; }
+      .saved-sessions ul { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; border: 1px solid #eee; border-radius: 5px; }
+      .saved-sessions li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+      .saved-sessions li:last-child { border-bottom: none; }
     </style>
     <!-- Scripts -->
     <script type="module" src="/main.js"></script>
@@ -28,7 +33,7 @@
     </div>
 
     <!-- Updated LLM Chat Sidebar -->
-    <div id="sidebar" x-data="llmChat()">
+    <div id="sidebar" x-data="llmChat()" x-init="init()">
       <h3>Game Master</h3>
       <div class="chat-window">
         <template x-for="message in chatHistory" :key="message.id">
@@ -42,12 +47,24 @@
         <input type="text" x-model="userInput" placeholder="What do you do?" :disabled="isWaitingForResponse" />
         <div class="chat-actions">
             <button type="submit" :disabled="isWaitingForResponse">Send</button>
-            <!-- NEW: Publish Button -->
             <button type="button" @click="publishChat()" :disabled="isWaitingForResponse || chatHistory.length < 2">Publish</button>
         </div>
       </form>
-      <!-- NEW: Element to show publish status -->
       <div x-show="publishStatus" class="publish-status" x-html="publishStatus"></div>
+
+      <!-- NEW: Saved Sessions List -->
+      <div class="saved-sessions" x-show="savedSessions.length > 0">
+        <h4>Saved Sessions</h4>
+        <ul>
+            <template x-for="session in savedSessions" :key="session.url">
+                <li>
+                    <span x-text="session.title"></span>
+                    <button @click="loadSession(session.url)">Load</button>
+                </li>
+            </template>
+        </ul>
+        <button @click="clearSessions()" style="width: 100%; margin-top: 0.5rem;">Clear All</button>
+      </div>
     </div>
   </body>
 </html>

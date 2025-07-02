@@ -58,12 +58,19 @@ window.app = function () {
 window.llmChat = function () {
   return {
     userInput: '',
-    chatHistory: [
-      // You can keep an initial message or start with an empty array
-      { id: 1, role: 'llm', text: 'Welcome! The Game Master is ready.' }
-    ],
+    chatHistory: [],
+    savedSessions: [], // NEW: To hold the list of saved games
     isWaitingForResponse: false,
     publishStatus: '',
+
+    // NEW: init() function to load sessions from localStorage
+    init() {
+        this.chatHistory = [{ id: 1, role: 'llm', text: 'Welcome! Start a new game or load a saved session.' }];
+        const sessions = localStorage.getItem('gameSessions');
+        if (sessions) {
+            this.savedSessions = JSON.parse(sessions);
+        }
+    },
 
     async sendMessage() {
       if (!this.userInput.trim() || this.isWaitingForResponse) return;
@@ -101,35 +108,65 @@ window.llmChat = function () {
         this.isWaitingForResponse = false;
       }
     },
-    // NEW: Function to publish the chat
+
     async publishChat() {
-      this.isWaitingForResponse = true;
-      this.publishStatus = 'Publishing to forum...';
+        this.isWaitingForResponse = true;
+        this.publishStatus = 'Publishing to forum...';
 
-      try {
-          const response = await fetch('/api/publish-topic', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ history: this.chatHistory }),
-          });
+        try {
+            const response = await fetch('/api/publish-topic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ history: this.chatHistory }),
+            });
 
-          const result = await response.json();
+            const result = await response.json();
 
-          if (!response.ok) {
-              throw new Error(result.error || 'Failed to publish.');
-          }
-          
-          // Create a clickable link in the status message
-          this.publishStatus = `Successfully published! <a href="${result.url}" target="_blank">View Topic</a>`;
+            if (!response.ok) { throw new Error(result.error || 'Failed to publish.'); }
+            
+            this.publishStatus = `Successfully published! <a href="${result.url}" target="_blank">View Topic</a>`;
 
-      } catch (error) {
-          console.error('Error publishing chat:', error);
-          this.publishStatus = `Error: ${error.message}`;
-      } finally {
-          this.isWaitingForResponse = false;
-      }
+            // NEW: Save the new session to our list and to localStorage
+            const newSession = { title: result.title, url: result.rssUrl };
+            this.savedSessions.push(newSession);
+            localStorage.setItem('gameSessions', JSON.stringify(this.savedSessions));
+
+        } catch (error) {
+            console.error('Error publishing chat:', error);
+            this.publishStatus = `Error: ${error.message}`;
+        } finally {
+            this.isWaitingForResponse = false;
+        }
+    },
+
+    // NEW: Function to load a session
+    async loadSession(rssUrl) {
+        this.isWaitingForResponse = true;
+        this.publishStatus = `Loading session...`;
+        this.chatHistory = []; // Clear current chat
+
+        try {
+            const response = await fetch(`/api/load-session?url=${encodeURIComponent(rssUrl)}`);
+            const result = await response.json();
+
+            if (!response.ok) { throw new Error(result.error || 'Failed to load session.'); }
+
+            this.chatHistory = result.chatHistory;
+            this.publishStatus = 'Session loaded successfully!';
+
+        } catch (error) {
+            console.error('Error loading session:', error);
+            this.publishStatus = `Error: ${error.message}`;
+        } finally {
+            this.isWaitingForResponse = false;
+        }
+    },
+
+    // NEW: Function to clear saved sessions
+    clearSessions() {
+        this.savedSessions = [];
+        localStorage.removeItem('gameSessions');
+        this.publishStatus = 'Cleared all saved sessions.';
     }
   };
 };
