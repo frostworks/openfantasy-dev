@@ -107,8 +107,9 @@ app.post('/api/publish-topic', async (req, res) => {
         topicData.append('_uid', NODEBB_UID);
         topicData.append('title', topicTitle);
         topicData.append('content', firstPost.text);
-        // If you need to specify a category, you would add it here:
-        // topicData.append('cid', 5);
+        // NEW: Add the required Category ID (cid).
+        // '1' is a common default, but you may need to change this to match a category on your forum.
+        topicData.append('cid', '1');
 
         const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
         const { tid, pid } = topicResponse.data.payload.topicData;
