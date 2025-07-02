@@ -80,7 +80,6 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// UPDATED: This endpoint now uses axios with URLSearchParams
 app.post('/api/publish-topic', async (req, res) => {
     const { history } = req.body;
     const { NODEBB_API_KEY, NODEBB_UID } = process.env;
@@ -95,7 +94,6 @@ app.post('/api/publish-topic', async (req, res) => {
 
     const headers = {
         'Authorization': `Bearer ${NODEBB_API_KEY}`,
-        // Set the correct Content-Type for URL-encoded data
         'Content-Type': 'application/x-www-form-urlencoded',
     };
 
@@ -107,13 +105,12 @@ app.post('/api/publish-topic', async (req, res) => {
         topicData.append('_uid', NODEBB_UID);
         topicData.append('title', topicTitle);
         topicData.append('content', firstPost.text);
-        // NEW: Add the required Category ID (cid).
-        // '1' is a common default, but you may need to change this to match a category on your forum.
         topicData.append('cid', '1');
 
         const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
-        const { tid, pid } = topicResponse.data.payload.topicData;
-        const pids = [pid];
+        
+        const { tid, mainPid } = topicResponse.data.response;
+        const pids = [mainPid];
 
         const replies = history.slice(2);
         for (const post of replies) {
@@ -122,7 +119,9 @@ app.post('/api/publish-topic', async (req, res) => {
             replyData.append('content', `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`);
             
             const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
-            pids.push(replyResponse.data.payload.pid);
+            
+            // CORRECTED: Destructure from the correct 'response' object for replies
+            pids.push(replyResponse.data.response.pid);
         }
 
         res.json({
