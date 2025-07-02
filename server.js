@@ -8,9 +8,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import livereload from 'livereload';
 import connectLiveReload from 'connect-livereload';
-
-// Import axios
 import axios from 'axios';
+
+// NEW: Import the XML parser
+import { XMLParser } from 'fast-xml-parser';
 
 dotenv.config();
 
@@ -36,6 +37,9 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 const SYSTEM_PROMPT = `You are a fantasy RPG Game Master. Your tone is slightly archaic and descriptive. You are running a game for the user. Do not break character.`;
+
+const NODEBB_URL = 'http://localhost:4567';
+
 
 app.get('/api/topic-data', (req, res) => {
     try {
@@ -139,6 +143,71 @@ app.post('/api/publish-topic', async (req, res) => {
         res.status(500).json({ error: error.response ? error.response.data.description : 'Failed to publish to NodeBB.' });
     }
 });
+
+app.get('/api/load-session', async (req, res) => {
+    const { url } = req.query;
+    if (!url) {
+        return res.status(400).json({ error: 'RSS feed URL is required.' });
+    }
+
+    try {
+        const fullUrl = `${NODEBB_URL}${url}`;
+        const response = await axios.get(fullUrl);
+        const xmlData = response.data;
+
+        const parser = new XMLParser({
+            ignoreAttributes: false,
+            cdataPropName: '__cdata',
+        });
+        const parsedXml = parser.parse(xmlData);
+
+        const items = Array.isArray(parsedXml.rss.channel.item) 
+            ? parsedXml.rss.channel.item 
+            : [parsedXml.rss.channel.item];
+
+        const chatHistory = [];
+
+        // 1. Handle the first post (from the channel description)
+        const firstPostContent = parsedXml.rss.channel.description.__cdata.replace(/<p dir="auto">|<\/p>/g, '').trim();
+        chatHistory.push({
+            id: Date.parse(parsedXml.rss.channel.pubDate),
+            role: 'user', // The first post is always the user
+            text: firstPostContent,
+        });
+
+        // 2. Handle the replies (from the items)
+        const reversedItems = items.reverse();
+        for (const item of reversedItems) {
+            const description = item.description.__cdata;
+            let role = 'user';
+            let text = description;
+
+            if (description.includes('<strong>Game Master:</strong>')) {
+                role = 'llm';
+                text = text.replace(/<strong>Game Master:<\/strong>/, '');
+            } else if (description.includes('<strong>Player:</strong>')) {
+                role = 'user';
+                text = text.replace(/<strong>Player:<\/strong>/, '');
+            }
+            
+            // Clean up remaining HTML tags
+            text = text.replace(/<p dir="auto">|<\/p>/g, '').trim();
+
+            chatHistory.push({
+                id: Date.parse(item.pubDate),
+                role,
+                text,
+            });
+        }
+        
+        res.json({ chatHistory });
+
+    } catch (error) {
+        console.error('Error loading session from RSS:', error.message);
+        res.status(500).json({ error: 'Failed to load or parse RSS feed.' });
+    }
+});
+
 
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
