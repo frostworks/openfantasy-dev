@@ -103,7 +103,6 @@ app.post('/api/publish-topic', async (req, res) => {
         const firstPost = history[1];
         const topicTitle = `Game Session: ${new Date().toLocaleString()}`;
         
-        // Format data using URLSearchParams
         const topicData = new URLSearchParams();
         topicData.append('_uid', NODEBB_UID);
         topicData.append('title', topicTitle);
@@ -111,18 +110,17 @@ app.post('/api/publish-topic', async (req, res) => {
         // If you need to specify a category, you would add it here:
         // topicData.append('cid', 5);
 
-        const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData, { headers });
+        const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
         const { tid, pid } = topicResponse.data.payload.topicData;
         const pids = [pid];
 
         const replies = history.slice(2);
         for (const post of replies) {
-            // Format reply data using URLSearchParams
             const replyData = new URLSearchParams();
             replyData.append('_uid', NODEBB_UID);
             replyData.append('content', `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`);
             
-            const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData, { headers });
+            const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
             pids.push(replyResponse.data.payload.pid);
         }
 
