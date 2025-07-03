@@ -40,6 +40,58 @@ const SYSTEM_PROMPT = `You are a fantasy RPG Game Master. Your tone is slightly 
 
 const NODEBB_URL = 'http://localhost:4567';
 
+// --- Helper function for Game Actions ---
+async function handleGameAction({ game, currency, amount, reason, gameTopicId }) {
+    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
+    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+    const characterSheetTag = `char-sheet-${game}-uid-${NODEBB_UID}`;
+
+    const searchResponse = await axios.get(`${NODEBB_URL}/api/tags/${characterSheetTag}`, { headers });
+    const characterSheetTopic = searchResponse.data.topics[0];
+
+    let tid, mainPid, currentStats;
+
+    if (!characterSheetTopic) {
+        console.log(`Character sheet for ${game} not found. Creating...`);
+        const title = `${game.toUpperCase()} Character Sheet`;
+        const initialStats = { [currency]: amount };
+        const content = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(initialStats, null, 2) + "\n```";
+
+        const topicData = new URLSearchParams({ _uid: NODEBB_UID, title, content, cid: '3', 'tags[]': characterSheetTag });
+        const createResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+        tid = createResponse.data.response.tid;
+        mainPid = createResponse.data.response.mainPid;
+        currentStats = initialStats;
+    } else {
+        tid = characterSheetTopic.tid;
+        mainPid = characterSheetTopic.mainPid;
+        const topicDetails = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+        const mainPostContent = topicDetails.data.posts[0].content;
+        const jsonMatch = mainPostContent.match(/```json\n([\s\S]*?)\n```/);
+        currentStats = jsonMatch ? JSON.parse(jsonMatch[1]) : {};
+    }
+
+    const updatedStats = { ...currentStats };
+    updatedStats[currency] = (updatedStats[currency] || 0) + amount;
+    
+    const newContent = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(updatedStats, null, 2) + "\n```";
+    const editData = new URLSearchParams({ _uid: NODEBB_UID, content: newContent });
+    await axios.put(`${NODEBB_URL}/api/v3/posts/${mainPid}`, editData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+
+    const logData = new URLSearchParams({ _uid: NODEBB_UID, content: `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}` });
+    const logResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, logData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+    const logPid = logResponse.data.response.pid;
+    const logPostUrl = `${NODEBB_URL}/post/${logPid}`;
+
+    if (gameTopicId) {
+        const referenceContent = `*(System Event: [${currency} updated](${logPostUrl}))*`;
+        const referenceData = new URLSearchParams({ _uid: NODEBB_UID, content: referenceContent });
+        await axios.post(`${NODEBB_URL}/api/v3/topics/${gameTopicId}`, referenceData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+    }
+
+    return updatedStats;
+}
+
 // --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {
     try {
@@ -236,77 +288,79 @@ app.get('/api/load-session', async (req, res) => {
 });
 
 app.post('/api/game-action', async (req, res) => {
-    const { game, currency, amount, reason, gameTopicId } = req.body;
-    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
-    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
-
-    const characterSheetTag = `char-sheet-${game}-uid-${NODEBB_UID}`;
-
     try {
-        const searchResponse = await axios.get(`${NODEBB_URL}/api/tags/${characterSheetTag}`, { headers });
-        const characterSheetTopic = searchResponse.data.topics[0];
-
-        let tid, mainPid, currentStats;
-
-        if (!characterSheetTopic) {
-            console.log(`Character sheet for ${game} not found. Creating...`);
-            const title = `${game.toUpperCase()} Character Sheet`;
-            const initialStats = { [currency]: amount };
-            const content = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(initialStats, null, 2) + "\n```";
-
-            const topicData = new URLSearchParams({
-                _uid: NODEBB_UID,
-                title: title,
-                content: content,
-                cid: '3',
-                'tags[]': characterSheetTag,
-            });
-
-            const createResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
-            tid = createResponse.data.response.tid;
-            mainPid = createResponse.data.response.mainPid;
-            currentStats = initialStats;
-
-        } else {
-            tid = characterSheetTopic.tid;
-            mainPid = characterSheetTopic.mainPid;
-            const topicDetails = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
-            
-            const mainPostContent = topicDetails.data.posts[0].content;
-            const jsonMatch = mainPostContent.match(/```json\n([\s\S]*?)\n```/);
-            currentStats = jsonMatch ? JSON.parse(jsonMatch[1]) : {};
-        }
-
-        const updatedStats = { ...currentStats };
-        updatedStats[currency] = (updatedStats[currency] || 0) + amount;
-        
-        const newContent = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(updatedStats, null, 2) + "\n```";
-        const editData = new URLSearchParams({ _uid: NODEBB_UID, content: newContent });
-        await axios.put(`${NODEBB_URL}/api/v3/posts/${mainPid}`, editData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
-
-        const logData = new URLSearchParams({
-            _uid: NODEBB_UID,
-            content: `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}`,
-        });
-        const logResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, logData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
-        const logPid = logResponse.data.response.pid;
-        const logPostUrl = `${NODEBB_URL}/post/${logPid}`;
-
-        // NEW: Post a reference back to the game session topic
-        if (gameTopicId) {
-            const referenceContent = `*(System Event: [${currency} updated](${logPostUrl}))*`;
-            const referenceData = new URLSearchParams({
-                _uid: NODEBB_UID,
-                content: referenceContent,
-            });
-            await axios.post(`${NODEBB_URL}/api/v3/topics/${gameTopicId}`, referenceData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
-        }
-
-        res.json({ success: true, newStats: updatedStats });
-
+        const newStats = await handleGameAction(req.body);
+        res.json({ success: true, newStats: newStats });
     } catch (error) {
         console.error('Error performing game action:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Failed to perform game action.' });
+    }
+});
+
+app.post('/api/publish-topic', async (req, res) => {
+    const { history } = req.body;
+    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
+
+    if (!NODEBB_API_KEY || !NODEBB_UID) {
+        return res.status(500).json({ error: 'NodeBB API Key or UID not configured on the server.' });
+    }
+    if (!history || history.length < 2) {
+        return res.status(400).json({ error: 'Chat history is too short to publish.' });
+    }
+
+    const headers = {
+        'Authorization': `Bearer ${NODEBB_API_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    try {
+        const firstPost = history.find(p => p.role === 'user');
+        const topicTitle = `Game Session: ${new Date().toLocaleString()}`;
+        
+        const topicData = new URLSearchParams({
+            _uid: NODEBB_UID,
+            title: topicTitle,
+            content: firstPost.text,
+            cid: '1',
+            'tags[]': 'Civ VI',
+            'tags[]': 'GameMasterSession',
+        });
+
+        const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
+        const { tid, mainPid } = topicResponse.data.response;
+        const pids = [mainPid];
+
+        const replies = history.slice(1); // Get all messages after the welcome message
+        for (const post of replies) {
+            if (post.type === 'game_action') {
+                // If it's a game action, process it
+                await handleGameAction({ ...post.actionData, gameTopicId: tid });
+            } else if (post.role !== 'system') { // Don't post the welcome message again
+                // Otherwise, post it as a reply
+                const replyData = new URLSearchParams({
+                    _uid: NODEBB_UID,
+                    content: `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`,
+                });
+                const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
+                pids.push(replyResponse.data.response.pid);
+            }
+        }
+
+        const fullTopicDataResponse = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+        const { rssFeedUrl } = fullTopicDataResponse.data;
+
+        res.json({
+            message: 'Successfully published topic!',
+            tid: tid,
+            pids: pids,
+            url: `${NODEBB_URL}/topic/${tid}`,
+            rssUrl: rssFeedUrl,
+            title: topicTitle,
+        });
+
+    } catch (error) {
+        console.error('Error publishing to NodeBB:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: error.response ? error.response.data.description : 'Failed to publish to NodeBB.' });
     }
 });
 
