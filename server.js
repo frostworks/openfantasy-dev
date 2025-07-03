@@ -97,10 +97,9 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
 }
 
 
-// UPDATED: Category endpoint now uses 'page' for pagination
 app.get('/api/browse/category/:cid', async (req, res) => {
     const { cid } = req.params;
-    const { page } = req.query; // Use 'page' for categories
+    const { page } = req.query;
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
@@ -117,17 +116,17 @@ app.get('/api/browse/category/:cid', async (req, res) => {
     }
 });
 
-// Topic endpoint correctly uses 'start'
+// UPDATED: Topic endpoint now also uses 'page' for pagination
 app.get('/api/browse/topic/:tid', async (req, res) => {
     const { tid } = req.params;
-    const { start } = req.query;
+    const { page } = req.query; // Use 'page' for topics as well
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
         let url = `${NODEBB_URL}/api/topic/${tid}`;
-        if (start) {
-            url += `?start=${start}`;
+        if (page) {
+            url += `?page=${page}`;
         }
         const response = await axios.get(url, { headers });
         res.json(response.data);

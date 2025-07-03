@@ -43,8 +43,6 @@ window.app = function () {
     }
   };
 };
-
-
 window.browser = function() {
   return {
       isLoading: true,
@@ -52,8 +50,8 @@ window.browser = function() {
       currentView: 'category',
       categoryData: { topics: [], children: [] },
       topicData: null,
-      nextTopicPage: 1, // Use page number for categories
-      nextPostStart: 0, // Use start index for topic posts
+      nextTopicPage: 1,
+      nextPostPage: 1, // Use page number for posts as well
 
       async loadCategory(cid) {
           if (!cid) return;
@@ -69,7 +67,7 @@ window.browser = function() {
               data.children = data.children || [];
               
               this.categoryData = data;
-              this.nextTopicPage = data.pagination.next.page; // Set the next page number
+              this.nextTopicPage = data.pagination.next.page;
               this.currentView = 'category';
           } catch (error) {
               console.error('Error loading category:', error);
@@ -91,7 +89,7 @@ window.browser = function() {
               data.posts = data.posts || [];
 
               this.topicData = data;
-              this.nextPostStart = (data.pagination.currentPage < data.pagination.pageCount) ? data.nextStart : 0;
+              this.nextPostPage = data.pagination.next.page;
               this.currentView = 'topic';
               window.dispatchEvent(new CustomEvent('topic-loaded', { detail: { tid: tid } }));
           } catch (error) {
@@ -126,11 +124,11 @@ window.browser = function() {
       },
 
       async loadMorePosts() {
-          if (this.isMoreLoading || !this.nextPostStart) return;
+          if (this.isMoreLoading || !this.nextPostPage) return;
           this.isMoreLoading = true;
 
           try {
-              const response = await fetch(`/api/browse/topic/${this.topicData.tid}?start=${this.nextPostStart}`);
+              const response = await fetch(`/api/browse/topic/${this.topicData.tid}?page=${this.nextPostPage}`);
               if (!response.ok) throw new Error('Failed to fetch more posts');
               const data = await response.json();
 
@@ -141,7 +139,7 @@ window.browser = function() {
                   this.topicData.posts.push(...newPosts);
               }
               
-              this.nextPostStart = (data.pagination.currentPage < data.pagination.pageCount) ? data.nextStart : 0;
+              this.nextPostPage = data.pagination.next.page;
           } catch (error) {
               console.error('Error loading more posts:', error);
           } finally {
@@ -150,7 +148,6 @@ window.browser = function() {
       },
   };
 };
-
 
 window.llmChat = function () {
 return {
