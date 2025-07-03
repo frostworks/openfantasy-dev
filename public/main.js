@@ -49,6 +49,7 @@ window.llmChat = function () {
     userInput: '',
     chatHistory: [],
     savedSessions: [],
+    characterSheet: null,
     isWaitingForResponse: false,
     publishStatus: '',
 
@@ -154,6 +155,31 @@ window.llmChat = function () {
         this.savedSessions = [];
         localStorage.removeItem('gameSessions');
         this.publishStatus = 'Cleared all saved sessions.';
+    },
+
+    async performGameAction(game, currency, amount, reason) {
+        this.isWaitingForResponse = true;
+        this.publishStatus = `Performing action: ${reason}...`;
+
+        try {
+            const response = await fetch('/api/game-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ game, currency, amount, reason }),
+            });
+
+            const result = await response.json();
+            if (!response.ok) { throw new Error(result.error || 'Failed to perform action.'); }
+
+            this.characterSheet = result.newStats;
+            this.publishStatus = `Action successful: ${reason}!`;
+
+        } catch (error) {
+            console.error('Error performing game action:', error);
+            this.publishStatus = `Error: ${error.message}`;
+        } finally {
+            this.isWaitingForResponse = false;
+        }
     },
 
     // --- Functions for editing posts ---

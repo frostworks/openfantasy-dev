@@ -71,6 +71,18 @@
       </form>
       <div x-show="publishStatus" class="publish-status" x-html="publishStatus"></div>
 
+      <!-- NEW: Character Sheet Display -->
+      <div class="character-sheet" x-show="characterSheet">
+        <h4>Character Sheet</h4>
+        <div class="stats-grid">
+            <template x-for="stat in Object.keys(characterSheet)" :key="stat">
+                <div>
+                    <strong x-text="stat.charAt(0).toUpperCase() + stat.slice(1)"></strong>: <span x-text="characterSheet[stat]"></span>
+                </div>
+            </template>
+        </div>
+      </div>
+
       <!-- Saved Sessions List -->
       <div class="saved-sessions" x-show="savedSessions.length > 0">
         <h4>Saved Sessions</h4>
@@ -83,6 +95,12 @@
             </template>
         </ul>
         <button @click="clearSessions()" style="width: 100%; margin-top: 0.5rem;">Clear All</button>
+      </div>
+
+      <!-- NEW: Dev Actions for Testing -->
+      <div class="dev-actions">
+        <h4>Dev Actions</h4>
+        <button @click="performGameAction('civ6', 'gold', 10, 'Found a treasure chest')">+10 Gold</button>
       </div>
     </div>
   </body>
