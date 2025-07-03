@@ -317,6 +317,8 @@ app.put('/api/posts/:pid', async (req, res) => {
         const editData = new URLSearchParams({
             _uid: NODEBB_UID,
             content: content,
+            // NEW: Explicitly set the edited timestamp to force the "edited" flag
+            edited: Date.now(),
         });
 
         const response = await axios.put(`${NODEBB_URL}/api/v3/posts/${pid}`, editData.toString(), { headers });
