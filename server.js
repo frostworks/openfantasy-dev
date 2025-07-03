@@ -57,7 +57,7 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
         const initialStats = { [currency]: amount };
         const content = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(initialStats, null, 2) + "\n```";
 
-        const topicData = new URLSearchParams({ _uid: NODEBB_UID, title, content, cid: '1', 'tags[]': characterSheetTag });
+        const topicData = new URLSearchParams({ _uid: NODEBB_UID, title, content, cid: '3', 'tags[]': characterSheetTag });
         const createResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
         tid = createResponse.data.response.tid;
         mainPid = createResponse.data.response.mainPid;
@@ -96,15 +96,18 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
     return updatedStats;
 }
 
-// NEW: Endpoint to browse a NodeBB Category
+
+// UPDATED: Endpoint now supports pagination
 app.get('/api/browse/category/:cid', async (req, res) => {
     const { cid } = req.params;
+    const { start } = req.query; // Get start index from query params
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
-        const response = await axios.get(`${NODEBB_URL}/api/category/${cid}`, { headers });
-        console.log(response.data);
+        // Append start parameter if it exists
+        const url = start ? `${NODEBB_URL}/api/category/${cid}?start=${start}` : `${NODEBB_URL}/api/category/${cid}`;
+        const response = await axios.get(url, { headers });
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching category ${cid}:`, error.response ? error.response.data : error.message);
@@ -112,20 +115,24 @@ app.get('/api/browse/category/:cid', async (req, res) => {
     }
 });
 
-// NEW: Endpoint to browse a NodeBB Topic
+// UPDATED: Endpoint now supports pagination
 app.get('/api/browse/topic/:tid', async (req, res) => {
     const { tid } = req.params;
+    const { start } = req.query; // Get start index from query params
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
-        const response = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+        // Append start parameter if it exists
+        const url = start ? `${NODEBB_URL}/api/topic/${tid}?start=${start}` : `${NODEBB_URL}/api/topic/${tid}`;
+        const response = await axios.get(url, { headers });
         res.json(response.data);
     } catch (error) {
         console.error(`Error fetching topic ${tid}:`, error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Failed to fetch topic data.' });
     }
 });
+
 
 // --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {
