@@ -61,7 +61,6 @@ app.post('/api/chat', async (req, res) => {
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
-        // --- Fetch user data to get the character sheet ---
         const userSlug = 'psychobunny'; 
         const userResponse = await axios.get(`${NODEBB_URL}/api/user/${userSlug}`, { headers });
         
@@ -237,7 +236,7 @@ app.get('/api/load-session', async (req, res) => {
 });
 
 app.post('/api/game-action', async (req, res) => {
-    const { game, currency, amount, reason } = req.body;
+    const { game, currency, amount, reason, gameTopicId } = req.body;
     const { NODEBB_API_KEY, NODEBB_UID } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
@@ -289,7 +288,19 @@ app.post('/api/game-action', async (req, res) => {
             _uid: NODEBB_UID,
             content: `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}`,
         });
-        await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, logData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const logResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, logData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const logPid = logResponse.data.response.pid;
+        const logPostUrl = `${NODEBB_URL}/post/${logPid}`;
+
+        // NEW: Post a reference back to the game session topic
+        if (gameTopicId) {
+            const referenceContent = `*(System Event: [${currency} updated](${logPostUrl}))*`;
+            const referenceData = new URLSearchParams({
+                _uid: NODEBB_UID,
+                content: referenceContent,
+            });
+            await axios.post(`${NODEBB_URL}/api/v3/topics/${gameTopicId}`, referenceData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
+        }
 
         res.json({ success: true, newStats: updatedStats });
 
@@ -317,7 +328,6 @@ app.put('/api/posts/:pid', async (req, res) => {
         const editData = new URLSearchParams({
             _uid: NODEBB_UID,
             content: content,
-            // NEW: Explicitly set the edited timestamp to force the "edited" flag
             edited: Date.now(),
         });
 

@@ -50,6 +50,7 @@ window.llmChat = function () {
     chatHistory: [],
     savedSessions: [],
     characterSheet: null,
+    activeTopicId: null, // To store the TID of the currently loaded game session
     isWaitingForResponse: false,
     publishStatus: '',
 
@@ -111,7 +112,6 @@ window.llmChat = function () {
             
             this.publishStatus = `Successfully published! <a href="${result.url}" target="_blank">View Topic</a>`;
 
-            // Save the new session to our list and to localStorage
             const newSession = { title: result.title, url: result.rssUrl };
             this.savedSessions.push(newSession);
             localStorage.setItem('gameSessions', JSON.stringify(this.savedSessions));
@@ -128,14 +128,20 @@ window.llmChat = function () {
         this.isWaitingForResponse = true;
         this.publishStatus = `Loading session...`;
         this.chatHistory = [];
+        this.activeTopicId = null; // Reset on load
 
         try {
+            // Extract the topic ID from the RSS URL to use for game actions
+            const tidMatch = rssUrl.match(/\/topic\/(\d+)\.rss/);
+            if (tidMatch && tidMatch[1]) {
+                this.activeTopicId = tidMatch[1];
+            }
+
             const response = await fetch(`/api/load-session?url=${encodeURIComponent(rssUrl)}`);
             const result = await response.json();
 
             if (!response.ok) { throw new Error(result.error || 'Failed to load session.'); }
 
-            // Add editing properties to each message
             this.chatHistory = result.chatHistory.map(msg => ({
                 ...msg,
                 editing: false,
@@ -157,40 +163,27 @@ window.llmChat = function () {
         this.publishStatus = 'Cleared all saved sessions.';
     },
 
-    async performGameAction(game, currency, amount, reason) {
-        this.isWaitingForResponse = true;
-        this.publishStatus = `Performing action: ${reason}...`;
+    performGameAction(game, currency, amount, reason) {
+        const eventText = `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}`;
+        
+        // Add a system event to the chat history to be processed later on publish
+        this.chatHistory.push({
+            id: Date.now(),
+            role: 'system', // A new role for styling or logic
+            type: 'game_action', // A special type to identify this message
+            actionData: { game, currency, amount, reason },
+            text: `(System Event: ${eventText})`,
+        });
 
-        try {
-            const response = await fetch('/api/game-action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ game, currency, amount, reason }),
-            });
-
-            const result = await response.json();
-            if (!response.ok) { throw new Error(result.error || 'Failed to perform action.'); }
-
-            this.characterSheet = result.newStats;
-            this.publishStatus = `Action successful: ${reason}!`;
-
-        } catch (error) {
-            console.error('Error performing game action:', error);
-            this.publishStatus = `Error: ${error.message}`;
-        } finally {
-            this.isWaitingForResponse = false;
-        }
+        this.publishStatus = `Queued action: ${reason}. It will be processed when you publish.`;
     },
 
-    // --- Functions for editing posts ---
     toggleEdit(index) {
-        // Reset any other edits first
         this.chatHistory.forEach((msg, i) => {
             if (i !== index) msg.editing = false;
         });
-        // Toggle the selected message
         const message = this.chatHistory[index];
-        message.editText = message.text; // Reset text on toggle
+        message.editText = message.text;
         message.editing = !message.editing;
     },
 
@@ -221,7 +214,6 @@ window.llmChat = function () {
             const result = await response.json();
             if (!response.ok) { throw new Error(result.error || 'Failed to save edit.'); }
 
-            // Update the local chat history with the new text
             message.text = newContent;
             message.editing = false;
             this.publishStatus = 'Edit saved successfully!';
