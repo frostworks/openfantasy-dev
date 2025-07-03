@@ -57,7 +57,7 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
         const initialStats = { [currency]: amount };
         const content = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(initialStats, null, 2) + "\n```";
 
-        const topicData = new URLSearchParams({ _uid: NODEBB_UID, title, content, cid: '3', 'tags[]': characterSheetTag });
+        const topicData = new URLSearchParams({ _uid: NODEBB_UID, title, content, cid: '1', 'tags[]': characterSheetTag });
         const createResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
         tid = createResponse.data.response.tid;
         mainPid = createResponse.data.response.mainPid;
@@ -95,6 +95,37 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
 
     return updatedStats;
 }
+
+// NEW: Endpoint to browse a NodeBB Category
+app.get('/api/browse/category/:cid', async (req, res) => {
+    const { cid } = req.params;
+    const { NODEBB_API_KEY } = process.env;
+    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+
+    try {
+        const response = await axios.get(`${NODEBB_URL}/api/category/${cid}`, { headers });
+        console.log(response.data);
+        res.json(response.data);
+    } catch (error) {
+        console.error(`Error fetching category ${cid}:`, error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Failed to fetch category data.' });
+    }
+});
+
+// NEW: Endpoint to browse a NodeBB Topic
+app.get('/api/browse/topic/:tid', async (req, res) => {
+    const { tid } = req.params;
+    const { NODEBB_API_KEY } = process.env;
+    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+
+    try {
+        const response = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+        res.json(response.data);
+    } catch (error) {
+        console.error(`Error fetching topic ${tid}:`, error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Failed to fetch topic data.' });
+    }
+});
 
 // --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {

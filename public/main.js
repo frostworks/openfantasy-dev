@@ -44,6 +44,51 @@ window.app = function () {
   };
 };
 
+window.browser = function() {
+  return {
+      isLoading: true,
+      currentView: 'category', // Can be 'category' or 'topic'
+      categoryData: null,
+      topicData: null,
+
+      async loadCategory(cid) {
+          if (!cid) return;
+          this.isLoading = true;
+          this.topicData = null; // Clear topic data when loading a category
+
+          try {
+              const response = await fetch(`/api/browse/category/${cid}`);
+              if (!response.ok) throw new Error('Failed to fetch category');
+              
+              this.categoryData = await response.json();
+              this.currentView = 'category';
+          } catch (error) {
+              console.error('Error loading category:', error);
+              // Optionally, display an error state in the UI
+          } finally {
+              this.isLoading = false;
+          }
+      },
+
+      async loadTopic(tid) {
+          if (!tid) return;
+          this.isLoading = true;
+          this.categoryData = null; // Clear category data when loading a topic
+
+          try {
+              const response = await fetch(`/api/browse/topic/${tid}`);
+              if (!response.ok) throw new Error('Failed to fetch topic');
+              this.topicData = await response.json();
+              this.currentView = 'topic';
+          } catch (error) {
+              console.error('Error loading topic:', error);
+          } finally {
+              this.isLoading = false;
+          }
+      },
+  };
+};
+
 window.llmChat = function () {
   return {
     userInput: '',
