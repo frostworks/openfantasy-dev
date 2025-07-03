@@ -97,6 +97,32 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
 }
 
 
+// NEW: Wildcard GET proxy to the NodeBB API
+app.get(/^\/api\/nbb\/(.*)/, async (req, res) => {
+    // The captured path will be in req.params[0]
+    const nbbPath = req.params[0];
+    const { NODEBB_API_KEY } = process.env;
+    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+
+    try {
+        const targetUrl = `${NODEBB_URL}/api/${nbbPath}`;
+        console.log(`Proxying GET request to: ${targetUrl}`);
+
+        const response = await axios.get(targetUrl, { 
+            headers: headers,
+            params: req.query 
+        });
+        
+        res.status(response.status).json(response.data);
+
+    } catch (error) {
+        const status = error.response ? error.response.status : 500;
+        const data = error.response ? error.response.data : { error: 'Proxy request failed.' };
+        console.error(`Error proxying request to ${nbbPath}:`, data);
+        res.status(status).json(data);
+    }
+});
+
 app.get('/api/browse/category/:cid', async (req, res) => {
     const { cid } = req.params;
     const { page } = req.query;

@@ -43,6 +43,7 @@ window.app = function () {
     }
   };
 };
+
 window.browser = function() {
   return {
       isLoading: true,
