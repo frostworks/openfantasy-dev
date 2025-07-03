@@ -52,11 +52,9 @@
                 <button @click="loadCategory(categoryData.parentCid)" x-show="categoryData.parentCid > 0">↑ Up</button>
               </div>
               <ul class="browser-list">
-                <!-- CORRECTED: Use 'children' which is the correct property from the API -->
                 <template x-for="cat in categoryData.children" :key="cat.cid">
                   <li @click="loadCategory(cat.cid)">📁 <span x-text="cat.name"></span></li>
                 </template>
-                <!-- Topics -->
                 <template x-for="topic in categoryData.topics" :key="topic.tid">
                   <li @click="loadTopic(topic.tid)">📄 <span x-text="topic.title"></span></li>
                 </template>
@@ -85,7 +83,7 @@
     </div>
 
     <!-- Right Sidebar -->
-    <div id="sidebar" x-data="llmChat()" x-init="init()">
+    <div id="sidebar" x-data="llmChat()" x-init="init()" @topic-loaded.window="handleTopicLoad($event.detail)">
       <h3>Game Master</h3>
       <div class="chat-window">
         <template x-for="(message, index) in chatHistory" :key="message.id">
@@ -124,7 +122,6 @@
       <div class="character-sheet" x-show="characterSheet">
         <h4>Character Sheet</h4>
         <div class="stats-grid">
-            <!-- This check prevents errors when characterSheet is null -->
             <template x-for="stat in Object.keys(characterSheet || {})" :key="stat">
                 <div>
                     <strong x-text="stat.charAt(0).toUpperCase() + stat.slice(1)"></strong>: <span x-text="characterSheet[stat]"></span>

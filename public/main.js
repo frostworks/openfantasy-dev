@@ -44,6 +44,7 @@ window.app = function () {
   };
 };
 
+// NEW: The browser component for the left-hand file explorer
 window.browser = function() {
   return {
       isLoading: true,
@@ -59,7 +60,6 @@ window.browser = function() {
           try {
               const response = await fetch(`/api/browse/category/${cid}`);
               if (!response.ok) throw new Error('Failed to fetch category');
-              
               this.categoryData = await response.json();
               this.currentView = 'category';
           } catch (error) {
@@ -80,6 +80,10 @@ window.browser = function() {
               if (!response.ok) throw new Error('Failed to fetch topic');
               this.topicData = await response.json();
               this.currentView = 'topic';
+
+              // Dispatch an event to notify the other component that a topic was loaded
+              this.$dispatch('topic-loaded', { tid: tid });
+
           } catch (error) {
               console.error('Error loading topic:', error);
           } finally {
