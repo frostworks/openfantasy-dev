@@ -97,16 +97,18 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
 }
 
 
-// UPDATED: Endpoint now supports pagination
+// UPDATED: Category endpoint now uses 'page' for pagination
 app.get('/api/browse/category/:cid', async (req, res) => {
     const { cid } = req.params;
-    const { start } = req.query; // Get start index from query params
+    const { page } = req.query; // Use 'page' for categories
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
-        // Append start parameter if it exists
-        const url = start ? `${NODEBB_URL}/api/category/${cid}?start=${start}` : `${NODEBB_URL}/api/category/${cid}`;
+        let url = `${NODEBB_URL}/api/category/${cid}`;
+        if (page) {
+            url += `?page=${page}`;
+        }
         const response = await axios.get(url, { headers });
         res.json(response.data);
     } catch (error) {
@@ -115,16 +117,18 @@ app.get('/api/browse/category/:cid', async (req, res) => {
     }
 });
 
-// UPDATED: Endpoint now supports pagination
+// Topic endpoint correctly uses 'start'
 app.get('/api/browse/topic/:tid', async (req, res) => {
     const { tid } = req.params;
-    const { start } = req.query; // Get start index from query params
+    const { start } = req.query;
     const { NODEBB_API_KEY } = process.env;
     const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
 
     try {
-        // Append start parameter if it exists
-        const url = start ? `${NODEBB_URL}/api/topic/${tid}?start=${start}` : `${NODEBB_URL}/api/topic/${tid}`;
+        let url = `${NODEBB_URL}/api/topic/${tid}`;
+        if (start) {
+            url += `?start=${start}`;
+        }
         const response = await axios.get(url, { headers });
         res.json(response.data);
     } catch (error) {
@@ -132,7 +136,6 @@ app.get('/api/browse/topic/:tid', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch topic data.' });
     }
 });
-
 
 // --- API Endpoints ---
 app.get('/api/topic-data', (req, res) => {

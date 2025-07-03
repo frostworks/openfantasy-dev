@@ -43,7 +43,7 @@
   </head>
   <body>
     <!-- Main content area (File Browser) -->
-    <div id="app" x-data="browser()" x-init="loadCategory(1)">
+    <div id="app" x-data="browser()" x-init="loadCategory(3)">
       <div x-show="isLoading && !isMoreLoading" class="loading-text">Loading...</div>
 
       <div x-show="!isLoading" class="browser-content">
@@ -92,7 +92,71 @@
 
     <!-- Right Sidebar -->
     <div id="sidebar" x-data="llmChat()" x-init="init()" @topic-loaded.window="handleTopicLoad($event.detail)">
+      <h3>Game Master</h3>
+      <div class="chat-window">
+        <template x-for="(message, index) in chatHistory" :key="message.id">
+          <div class="chat-message" :class="message.role">
+            <!-- Edit Mode -->
+            <template x-if="message.editing">
+              <div class="edit-form">
+                <textarea x-model="message.editText"></textarea>
+                <div class="edit-form-actions">
+                  <button @click="saveEdit(index)">Save</button>
+                  <button @click="cancelEdit(index)">Cancel</button>
+                </div>
+              </div>
+            </template>
+            <!-- View Mode -->
+            <template x-if="!message.editing">
+              <div>
+                <p x-text="message.text"></p>
+                <button class="edit-button" @click="toggleEdit(index)" x-show="message.pid">Edit</button>
+              </div>
+            </template>
+          </div>
+        </template>
+        <div x-show="isWaitingForResponse" class="loading-text">GM is thinking...</div>
+      </div>
+      <form @submit.prevent="sendMessage()">
+        <input type="text" x-model="userInput" placeholder="What do you do?" :disabled="isWaitingForResponse" />
+        <div class="chat-actions">
+            <button type="submit" :disabled="isWaitingForResponse">Send</button>
+            <button type="button" @click="publishChat()" :disabled="isWaitingForResponse || chatHistory.length < 2">Publish</button>
+        </div>
+      </form>
+      <div x-show="publishStatus" class="publish-status" x-html="publishStatus"></div>
+      
+      <!-- Character Sheet Display -->
+      <div class="character-sheet" x-show="characterSheet">
+        <h4>Character Sheet</h4>
+        <div class="stats-grid">
+            <template x-for="stat in Object.keys(characterSheet || {})" :key="stat">
+                <div>
+                    <strong x-text="stat.charAt(0).toUpperCase() + stat.slice(1)"></strong>: <span x-text="characterSheet[stat]"></span>
+                </div>
+            </template>
+        </div>
+      </div>
+
+      <!-- Saved Sessions List -->
+      <div class="saved-sessions" x-show="savedSessions.length > 0">
+        <h4>Saved Sessions</h4>
+        <ul>
+            <template x-for="session in savedSessions" :key="session.url">
+                <li>
+                    <span x-text="session.title"></span>
+                    <button @click="loadSession(session.url)">Load</button>
+                </li>
+            </template>
+        </ul>
+        <button @click="clearSessions()" style="width: 100%; margin-top: 0.5rem;">Clear All</button>
+      </div>
+
+      <!-- Dev Actions for Testing -->
+      <div class="dev-actions">
+        <h4>Dev Actions</h4>
+        <button @click="performGameAction('civ6', 'gold', 10, 'Found a treasure chest')">+10 Gold</button>
+      </div>
       <!-- ... (The entire sidebar remains unchanged) ... -->
-    </div>
   </body>
 </html>

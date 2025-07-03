@@ -1,13 +1,59 @@
+window.app = function () {
+  return {
+    ajaxify: {
+      data: {},
+    },
+    template: '<div>Loading...</div>',
+    replyContent: '',
+
+    async init(templateName) {
+      try {
+        const configResponse = await fetch('/api/topic-data');
+        const mapConfig = await configResponse.json();
+        
+        const [dataResponse, templateResponse] = await Promise.all([
+          fetch(`${mapConfig.data_url}.json`),
+          fetch(mapConfig.template)
+        ]);
+
+        const data = await dataResponse.json();
+        const tpl = await templateResponse.text();
+        
+        this.ajaxify.data = {
+            [mapConfig.bind.topic_title]: data.title,
+            [mapConfig.bind.posts]: data.posts
+        };
+        
+        this.template = tpl;
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        this.template = '<div>Error loading content.</div>';
+      }
+    },
+
+    submitReply() {
+      if (!this.replyContent.trim()) return;
+      console.log('Posting reply:', this.replyContent);
+      const newPost = {
+        pid: Date.now(),
+        content: this.replyContent,
+      };
+      this.ajaxify.data.posts.push(newPost);
+      this.replyContent = '';
+    }
+  };
+};
+
+
 window.browser = function() {
   return {
       isLoading: true,
-      isMoreLoading: false, // For the "Loading more..." indicator
+      isMoreLoading: false,
       currentView: 'category',
-      // CORRECTED: Initialize with a default structure to prevent template errors
       categoryData: { topics: [], children: [] },
       topicData: null,
-      nextTopicStart: 0,
-      nextPostStart: 0,
+      nextTopicPage: 1, // Use page number for categories
+      nextPostStart: 0, // Use start index for topic posts
 
       async loadCategory(cid) {
           if (!cid) return;
@@ -19,12 +65,11 @@ window.browser = function() {
               if (!response.ok) throw new Error('Failed to fetch category');
               const data = await response.json();
 
-              // Ensure the topics and children properties always exist as arrays
               data.topics = data.topics || [];
               data.children = data.children || [];
               
               this.categoryData = data;
-              this.nextTopicStart = data.nextStart; // Set the next start index
+              this.nextTopicPage = data.pagination.next.page; // Set the next page number
               this.currentView = 'category';
           } catch (error) {
               console.error('Error loading category:', error);
@@ -43,11 +88,9 @@ window.browser = function() {
               if (!response.ok) throw new Error('Failed to fetch topic');
               const data = await response.json();
 
-              // Ensure the posts property always exists as an array
               data.posts = data.posts || [];
 
               this.topicData = data;
-              // Determine if there is a next page for posts
               this.nextPostStart = (data.pagination.currentPage < data.pagination.pageCount) ? data.nextStart : 0;
               this.currentView = 'topic';
               window.dispatchEvent(new CustomEvent('topic-loaded', { detail: { tid: tid } }));
@@ -59,15 +102,14 @@ window.browser = function() {
       },
 
       async loadMoreTopics() {
-          if (this.isMoreLoading || !this.nextTopicStart) return;
+          if (this.isMoreLoading || !this.nextTopicPage) return;
           this.isMoreLoading = true;
 
           try {
-              const response = await fetch(`/api/browse/category/${this.categoryData.cid}?start=${this.nextTopicStart}`);
+              const response = await fetch(`/api/browse/category/${this.categoryData.cid}?page=${this.nextTopicPage}`);
               if (!response.ok) throw new Error('Failed to fetch more topics');
               const data = await response.json();
               
-              // CORRECTED: Add a check to prevent adding duplicate topics
               const existingTids = new Set(this.categoryData.topics.map(t => t.tid));
               const newTopics = (data.topics || []).filter(t => !existingTids.has(t.tid));
 
@@ -75,7 +117,7 @@ window.browser = function() {
                   this.categoryData.topics.push(...newTopics);
               }
               
-              this.nextTopicStart = data.nextStart;
+              this.nextTopicPage = data.pagination.next.page;
           } catch (error) {
               console.error('Error loading more topics:', error);
           } finally {
@@ -92,7 +134,6 @@ window.browser = function() {
               if (!response.ok) throw new Error('Failed to fetch more posts');
               const data = await response.json();
 
-              // Add a check to prevent adding duplicate posts
               const existingPids = new Set(this.topicData.posts.map(p => p.pid));
               const newPosts = (data.posts || []).filter(p => !existingPids.has(p.pid));
 
@@ -109,6 +150,7 @@ window.browser = function() {
       },
   };
 };
+
 
 window.llmChat = function () {
 return {
@@ -129,7 +171,7 @@ return {
       this.loadCharacterSheet('civ6');
   },
 
-  handleTopicLoad({ detail: { tid } }) {
+  handleTopicLoad({ tid }) {
       console.log(`Topic ${tid} loaded in browser. Checking for saved session...`);
       
       const matchingSession = this.savedSessions.find(s => {
