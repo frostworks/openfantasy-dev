@@ -12,18 +12,20 @@
       .chat-message { margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 5px; white-space: pre-wrap; position: relative; }
       .chat-message.user { background-color: #e1f5fe; }
       .chat-message.llm { background-color: #f1f1f1; }
+      .chat-message.system { background-color: #fffde7; border-left: 3px solid #fbc02d; font-style: italic; color: #666; }
       .loading-text { font-style: italic; color: #888; text-align: center; }
       .chat-actions { display: flex; gap: 0.5rem; }
       .chat-actions button { flex-grow: 1; }
       .publish-status { margin-top: 1rem; padding: 0.5rem; background-color: #e8f5e9; border-radius: 5px; text-align: center; }
-      .saved-sessions { margin-top: 1rem; }
-      .saved-sessions h4 { margin-bottom: 0.5rem; }
+      .saved-sessions, .character-sheet, .dev-actions { margin-top: 1rem; }
+      .saved-sessions h4, .character-sheet h4, .dev-actions h4 { margin-bottom: 0.5rem; }
       .saved-sessions ul { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; border: 1px solid #eee; border-radius: 5px; }
       .saved-sessions li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
       .saved-sessions li:last-child { border-bottom: none; }
       .edit-button { position: absolute; top: 5px; right: 5px; cursor: pointer; font-size: 0.8em; background: #ddd; border-radius: 3px; padding: 2px 5px; }
       .edit-form textarea { width: 100%; min-height: 80px; }
       .edit-form-actions { display: flex; gap: 5px; margin-top: 5px; }
+      .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     </style>
     <!-- Scripts -->
     <script type="module" src="/main.js"></script>
@@ -70,12 +72,13 @@
         </div>
       </form>
       <div x-show="publishStatus" class="publish-status" x-html="publishStatus"></div>
-
-      <!-- NEW: Character Sheet Display -->
+      
+      <!-- Character Sheet Display -->
       <div class="character-sheet" x-show="characterSheet">
         <h4>Character Sheet</h4>
         <div class="stats-grid">
-            <template x-for="stat in Object.keys(characterSheet)" :key="stat">
+            <!-- This check prevents errors when characterSheet is null -->
+            <template x-for="stat in Object.keys(characterSheet || {})" :key="stat">
                 <div>
                     <strong x-text="stat.charAt(0).toUpperCase() + stat.slice(1)"></strong>: <span x-text="characterSheet[stat]"></span>
                 </div>
@@ -97,7 +100,7 @@
         <button @click="clearSessions()" style="width: 100%; margin-top: 0.5rem;">Clear All</button>
       </div>
 
-      <!-- NEW: Dev Actions for Testing -->
+      <!-- Dev Actions for Testing -->
       <div class="dev-actions">
         <h4>Dev Actions</h4>
         <button @click="performGameAction('civ6', 'gold', 10, 'Found a treasure chest')">+10 Gold</button>

@@ -115,6 +115,11 @@ window.llmChat = function () {
             const newSession = { title: result.title, url: result.rssUrl };
             this.savedSessions.push(newSession);
             localStorage.setItem('gameSessions', JSON.stringify(this.savedSessions));
+            
+            // Update the character sheet with the results from the publish action
+            if (result.newStats && Object.keys(result.newStats).length > 0) {
+                this.characterSheet = result.newStats;
+            }
 
         } catch (error) {
             console.error('Error publishing chat:', error);
@@ -128,10 +133,10 @@ window.llmChat = function () {
         this.isWaitingForResponse = true;
         this.publishStatus = `Loading session...`;
         this.chatHistory = [];
-        this.activeTopicId = null; // Reset on load
+        this.activeTopicId = null;
+        this.characterSheet = null; // Reset on load
 
         try {
-            // Extract the topic ID from the RSS URL to use for game actions
             const tidMatch = rssUrl.match(/\/topic\/(\d+)\.rss/);
             if (tidMatch && tidMatch[1]) {
                 this.activeTopicId = tidMatch[1];
@@ -147,6 +152,10 @@ window.llmChat = function () {
                 editing: false,
                 editText: msg.text,
             }));
+            
+            // Set the character sheet from the response
+            this.characterSheet = result.characterSheet;
+
             this.publishStatus = 'Session loaded successfully!';
 
         } catch (error) {
@@ -166,16 +175,29 @@ window.llmChat = function () {
     performGameAction(game, currency, amount, reason) {
         const eventText = `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}`;
         
-        // Add a system event to the chat history to be processed later on publish
         this.chatHistory.push({
             id: Date.now(),
-            role: 'system', // A new role for styling or logic
-            type: 'game_action', // A special type to identify this message
+            role: 'system',
+            type: 'game_action',
             actionData: { game, currency, amount, reason },
             text: `(System Event: ${eventText})`,
         });
 
         this.publishStatus = `Queued action: ${reason}. It will be processed when you publish.`;
+    },
+
+    async loadCharacterSheet(game) {
+      try {
+          const response = await fetch(`/api/character-sheet/${game}`);
+          const stats = await response.json();
+          if (response.ok) {
+              this.characterSheet = stats;
+          } else {
+              console.error('Failed to load character sheet:', stats.error);
+          }
+      } catch (error) {
+          console.error('Error fetching character sheet:', error);
+      }
     },
 
     toggleEdit(index) {

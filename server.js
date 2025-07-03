@@ -65,8 +65,11 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
     } else {
         tid = characterSheetTopic.tid;
         mainPid = characterSheetTopic.mainPid;
-        const topicDetails = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
-        const mainPostContent = topicDetails.data.posts[0].content;
+        
+        // CORRECTED: Fetch the raw content of the main post to read the stats
+        const postResponse = await axios.get(`${NODEBB_URL}/api/v3/posts/${mainPid}`, { headers });
+        const mainPostContent = postResponse.data.payload.content;
+        
         const jsonMatch = mainPostContent.match(/```json\n([\s\S]*?)\n```/);
         currentStats = jsonMatch ? JSON.parse(jsonMatch[1]) : {};
     }
@@ -75,7 +78,7 @@ async function handleGameAction({ game, currency, amount, reason, gameTopicId })
     updatedStats[currency] = (updatedStats[currency] || 0) + amount;
     
     const newContent = "This topic tracks character stats for this game.\n\n```json\n" + JSON.stringify(updatedStats, null, 2) + "\n```";
-    const editData = new URLSearchParams({ _uid: NODEBB_UID, content: newContent });
+    const editData = new URLSearchParams({ _uid: NODEBB_UID, content: newContent, edited: Date.now() });
     await axios.put(`${NODEBB_URL}/api/v3/posts/${mainPid}`, editData.toString(), { headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' } });
 
     const logData = new URLSearchParams({ _uid: NODEBB_UID, content: `${amount > 0 ? '+' : ''}${amount} ${currency}. Reason: ${reason}` });
@@ -105,28 +108,18 @@ app.get('/api/topic-data', (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-    const { history } = req.body;
-    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
+    const { history, characterSheet } = req.body; // Now accepts characterSheet from client
     const latestUserMessage = history[history.length - 1].text;
     console.log('Received history. Latest message:', latestUserMessage);
-
-    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
-
+    
     try {
-        const userSlug = 'psychobunny'; 
-        const userResponse = await axios.get(`${NODEBB_URL}/api/user/${userSlug}`, { headers });
+        let statsString = "No stats available.";
+        if (characterSheet) {
+            statsString = Object.entries(characterSheet)
+                .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`)
+                .join(', ');
+        }
         
-        const characterSheet = userResponse.data.currencies?.civ6 || {
-            gold: 20,
-            faith: 15,
-            science: 18,
-            culture: 25
-        };
-
-        const statsString = Object.entries(characterSheet)
-            .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`)
-            .join(', ');
-
         const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nThe player's current stats are: ${statsString}.`;
 
         const geminiHistory = history
@@ -170,32 +163,50 @@ app.post('/api/publish-topic', async (req, res) => {
         'Authorization': `Bearer ${NODEBB_API_KEY}`,
         'Content-Type': 'application/x-www-form-urlencoded',
     };
+    
+    let finalStats = {};
 
     try {
-        const firstPost = history[1];
+        const firstPost = history.find(p => p.role === 'user');
+        if (!firstPost) {
+            return res.status(400).json({ error: 'Cannot publish a session with no user messages.' });
+        }
+        
         const topicTitle = `Game Session: ${new Date().toLocaleString()}`;
         
-        const topicData = new URLSearchParams();
-        topicData.append('_uid', NODEBB_UID);
-        topicData.append('title', topicTitle);
-        topicData.append('content', firstPost.text);
-        topicData.append('cid', '1');
-        topicData.append('tags[]', 'Civ VI');
-        topicData.append('tags[]', 'GameMasterSession');
+        const topicData = new URLSearchParams({
+            _uid: NODEBB_UID,
+            title: topicTitle,
+            content: firstPost.text,
+            cid: '1',
+            'tags[]': 'Civ VI',
+            'tags[]': 'GameMasterSession',
+        });
 
         const topicResponse = await axios.post(`${NODEBB_URL}/api/v3/topics`, topicData.toString(), { headers });
-        
         const { tid, mainPid } = topicResponse.data.response;
         const pids = [mainPid];
 
-        const replies = history.slice(2);
+        const replies = history.slice(1);
         for (const post of replies) {
-            const replyData = new URLSearchParams();
-            replyData.append('_uid', NODEBB_UID);
-            replyData.append('content', `**${post.role === 'llm' ? 'Game Master' : 'Player'}:**\n\n${post.text}`);
-            
-            const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
-            pids.push(replyResponse.data.response.pid);
+            if (post.id === firstPost.id) {
+                continue;
+            }
+
+            if (post.type === 'game_action') {
+                finalStats = await handleGameAction({ ...post.actionData, gameTopicId: tid });
+            } else if (post.role === 'user' || post.role === 'llm') {
+                const content = post.role === 'llm' 
+                    ? `**Game Master:**\n\n${post.text}` 
+                    : post.text;
+
+                const replyData = new URLSearchParams({
+                    _uid: NODEBB_UID,
+                    content: content,
+                });
+                const replyResponse = await axios.post(`${NODEBB_URL}/api/v3/topics/${tid}`, replyData.toString(), { headers });
+                pids.push(replyResponse.data.response.pid);
+            }
         }
 
         const fullTopicDataResponse = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
@@ -208,6 +219,7 @@ app.post('/api/publish-topic', async (req, res) => {
             url: `${NODEBB_URL}/topic/${tid}`,
             rssUrl: rssFeedUrl,
             title: topicTitle,
+            newStats: finalStats,
         });
 
     } catch (error) {
@@ -219,15 +231,17 @@ app.post('/api/publish-topic', async (req, res) => {
 
 app.get('/api/load-session', async (req, res) => {
     const { url } = req.query;
+    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
 
     if (!url) {
         return res.status(400).json({ error: 'RSS feed URL is required.' });
     }
 
     try {
+        // --- Get Chat History from RSS ---
         const fullUrl = `${NODEBB_URL}${url}`;
-        const response = await axios.get(fullUrl);
-        const xmlData = response.data;
+        const rssResponse = await axios.get(fullUrl);
+        const xmlData = rssResponse.data;
 
         const parser = new XMLParser({
             ignoreAttributes: false,
@@ -240,7 +254,6 @@ app.get('/api/load-session', async (req, res) => {
         const parsedXml = parser.parse(xmlData);
         
         const items = parsedXml.rss.channel.item || [];
-
         const chatHistory = [];
 
         const firstPostContent = parsedXml.rss.channel.description.__cdata.replace(/<p dir="auto">|<\/p>/g, '').trim();
@@ -279,11 +292,36 @@ app.get('/api/load-session', async (req, res) => {
             }
         }
         
-        res.json({ chatHistory });
+        // --- NEW: Get Character Sheet data ---
+        let characterSheet = null;
+        const tidMatch = url.match(/\/topic\/(\d+)\.rss/);
+        if (tidMatch && tidMatch[1]) {
+            const tid = tidMatch[1];
+            const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+            const topicDetails = await axios.get(`${NODEBB_URL}/api/topic/${tid}`, { headers });
+            
+            // Find the game tag (e.g., 'civ-vi') to construct the character sheet tag
+            const gameTag = topicDetails.data.tags.find(t => t.value.toLowerCase().includes('civ'));
+            if (gameTag) {
+                const game = gameTag.value.toLowerCase().replace(' ', '-');
+                const characterSheetTag = `char-sheet-${game}-uid-${NODEBB_UID}`;
+                const searchResponse = await axios.get(`${NODEBB_URL}/api/tags/${characterSheetTag}`, { headers });
+                const characterSheetTopic = searchResponse.data.topics[0];
+
+                if (characterSheetTopic) {
+                    const sheetDetails = await axios.get(`${NODEBB_URL}/api/topic/${characterSheetTopic.tid}`, { headers });
+                    const mainPostContent = sheetDetails.data.posts[0].content;
+                    const jsonMatch = mainPostContent.match(/```json\n([\s\S]*?)\n```/);
+                    characterSheet = jsonMatch ? JSON.parse(jsonMatch[1]) : {};
+                }
+            }
+        }
+        
+        res.json({ chatHistory, characterSheet });
 
     } catch (error) {
-        console.error('Error loading session from RSS:', error);
-        res.status(500).json({ error: 'Failed to load or parse RSS feed.' });
+        console.error('Error loading session:', error);
+        res.status(500).json({ error: 'Failed to load or parse session data.' });
     }
 });
 
@@ -294,6 +332,33 @@ app.post('/api/game-action', async (req, res) => {
     } catch (error) {
         console.error('Error performing game action:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Failed to perform game action.' });
+    }
+});
+
+// NEW: Endpoint to get a character sheet
+app.get('/api/character-sheet/:game', async (req, res) => {
+    const { game } = req.params;
+    const { NODEBB_API_KEY, NODEBB_UID } = process.env;
+    const headers = { 'Authorization': `Bearer ${NODEBB_API_KEY}` };
+    const characterSheetTag = `char-sheet-${game}-uid-${NODEBB_UID}`;
+
+    try {
+        const searchResponse = await axios.get(`${NODEBB_URL}/api/tags/${characterSheetTag}`, { headers });
+        const characterSheetTopic = searchResponse.data.topics[0];
+
+        if (characterSheetTopic) {
+            const sheetDetails = await axios.get(`${NODEBB_URL}/api/topic/${characterSheetTopic.tid}`, { headers });
+            const mainPostContent = sheetDetails.data.posts[0].content;
+            const jsonMatch = mainPostContent.match(/```json\n([\s\S]*?)\n```/);
+            const stats = jsonMatch ? JSON.parse(jsonMatch[1]) : {};
+            return res.json(stats);
+        } else {
+            // If no sheet exists, return an empty object
+            return res.json({});
+        }
+    } catch (error) {
+        console.error('Error fetching character sheet:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Failed to fetch character sheet.' });
     }
 });
 
