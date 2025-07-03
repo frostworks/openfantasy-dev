@@ -9,8 +9,8 @@
       #app { flex-grow: 1; padding: 1rem; }
       #sidebar { width: 350px; border-left: 1px solid #ccc; padding: 1rem; display: flex; flex-direction: column; height: 100vh; }
       .chat-window { flex-grow: 1; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #eee; padding: 0.5rem; border-radius: 5px;}
-      .chat-message { margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 5px; white-space: pre-wrap; }
-      .chat-message.user { background-color: #e1f5fe; text-align: right; }
+      .chat-message { margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 5px; white-space: pre-wrap; position: relative; }
+      .chat-message.user { background-color: #e1f5fe; }
       .chat-message.llm { background-color: #f1f1f1; }
       .loading-text { font-style: italic; color: #888; text-align: center; }
       .chat-actions { display: flex; gap: 0.5rem; }
@@ -21,6 +21,9 @@
       .saved-sessions ul { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; border: 1px solid #eee; border-radius: 5px; }
       .saved-sessions li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
       .saved-sessions li:last-child { border-bottom: none; }
+      .edit-button { position: absolute; top: 5px; right: 5px; cursor: pointer; font-size: 0.8em; background: #ddd; border-radius: 3px; padding: 2px 5px; }
+      .edit-form textarea { width: 100%; min-height: 80px; }
+      .edit-form-actions { display: flex; gap: 5px; margin-top: 5px; }
     </style>
     <!-- Scripts -->
     <script type="module" src="/main.js"></script>
@@ -36,9 +39,25 @@
     <div id="sidebar" x-data="llmChat()" x-init="init()">
       <h3>Game Master</h3>
       <div class="chat-window">
-        <template x-for="message in chatHistory" :key="message.id">
+        <template x-for="(message, index) in chatHistory" :key="message.id">
           <div class="chat-message" :class="message.role">
-            <p x-text="message.text"></p>
+            <!-- Edit Mode -->
+            <template x-if="message.editing">
+              <div class="edit-form">
+                <textarea x-model="message.editText"></textarea>
+                <div class="edit-form-actions">
+                  <button @click="saveEdit(index)">Save</button>
+                  <button @click="cancelEdit(index)">Cancel</button>
+                </div>
+              </div>
+            </template>
+            <!-- View Mode -->
+            <template x-if="!message.editing">
+              <div>
+                <p x-text="message.text"></p>
+                <button class="edit-button" @click="toggleEdit(index)" x-show="message.pid">Edit</button>
+              </div>
+            </template>
           </div>
         </template>
         <div x-show="isWaitingForResponse" class="loading-text">GM is thinking...</div>
@@ -52,7 +71,7 @@
       </form>
       <div x-show="publishStatus" class="publish-status" x-html="publishStatus"></div>
 
-      <!-- NEW: Saved Sessions List -->
+      <!-- Saved Sessions List -->
       <div class="saved-sessions" x-show="savedSessions.length > 0">
         <h4>Saved Sessions</h4>
         <ul>
