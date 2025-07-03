@@ -1,0 +1,15 @@
+./llm/gemini.toml
+# This file documents the role of the LLM (Gemini) in the development of the Umber project.
+# It serves as a log of the collaborative process and the AI's function.
+
+[assistant]
+name = "Gemini"
+role = "Collaborative Pair-Programmer & Systems Architect"
+contribution = "Assisted in the design, implementation, and debugging of a full-stack application. Provided real-time code generation, architectural feedback, debugging assistance for complex environment-specific issues, and strategic planning for future development phases."
+
+[sessions]
+    [sessions.s1]
+    date = "2025-07-02 to 2025-07-03"
+    objective = "Develop a proof-of-concept for a headless application using Node.js, Express, and Alpine.js, with NodeBB as the backend and Gemini as the AI service."
+    outcome = "Successfully built a functional prototype capable of creating, saving, loading, and editing conversational game sessions persisted in a NodeBB forum. Established a robust and scalable architecture for future development."
+    notes = "Included an extensive and valuable debugging session related to local model loading, which ultimately led to a more robust server-side API architecture."
